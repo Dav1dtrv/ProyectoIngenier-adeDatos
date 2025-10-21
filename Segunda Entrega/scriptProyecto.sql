@@ -563,7 +563,7 @@ inner join usuario u on p.idUsuarioFK = u.idUsuario
 inner join equipo e on p.idEquipoFK = e.idEquipo
 where p.estadoPrestamo = 'activo';
 
-# RQF025 - Consulta equipos por orden de solicitud
+# RQF025 - Consulta equipos por cantidad de solicitudes
 select 
     e.idEquipo as 'ID Equipo',
     e.tipoEquipo as 'Tipo de equipo',
