@@ -390,8 +390,7 @@ where idUsuario = 4;
 select * from usuario;
 
 # RQF011 - Préstamos usuario
-select * 
-from prestamo
+select * from prestamo
 where idUsuarioFK = 3;
 
 # RQF012 - Registrar préstamo – Alto nivel
@@ -410,7 +409,7 @@ after insert
 on prestamo
 for each row
 begin
-	update equipo set estado = 'no disponible'
+	update equipo set estado = 'prestado'
 	where idEquipo = new.idEquipoFK;
 end $$ 
 DELIMITER ;
@@ -442,7 +441,7 @@ after update
 on prestamo
 for each row
 begin
-    if new.estadoPrestamo = 'devuelto' then
+    if new.estadoPrestamo = 'devuelto' and old.estadoPrestamo != 'devuelto' then
         update equipo
         set estado = 'disponible'
         where idEquipo = new.idEquipoFK;
@@ -465,7 +464,7 @@ DELIMITER ;
 
 # RQF018 - Extensión devolución  
 update prestamo
-set fechaDevolucion = '2025-10-25'
+set fechaLimite = '2025-10-25'
 where idPrestamo = 3 and estadoPrestamo = 'activo';
 
 # RQF019 - Consultar préstamo por estado – Alto nivel
