@@ -394,7 +394,7 @@ select * from prestamo
 where idUsuarioFK = 3;
 
 # RQF012 - Registrar préstamo – Alto nivel
-insert into prestamo (idEquipoFK, idUsuarioFK, fechaPrestamo, fechaDevolucion, estadoPrestamo)
+insert into prestamo (idEquipoFK, idUsuarioFK, fechaPrestamo, fechaLimite, estadoPrestamo)
 values (1, 1, '2025-10-01', '2025-10-08', 'activo');
 
 # RQF013 - Préstamo devuelto – Alto nivel
