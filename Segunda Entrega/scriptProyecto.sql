@@ -646,11 +646,11 @@ create procedure registrarPrestamo(
     in p_idUsuario int,
     in p_idEquipo int,
     in p_fechaPrestamo date,
-    in p_fechaDevolucion date
+    in p_fechaLimite date
 )
 begin
-    insert into prestamo(idUsuario, idEquipo, fechaPrestamo, fechaDevolucion, estado)
-    values(p_idUsuario, p_idEquipo, p_fechaPrestamo, p_fechaDevolucion, 'activo');
+    insert into prestamo(idUsuario, idEquipo, fechaPrestamo, fechaLimite, estado)
+    values(p_idUsuario, p_idEquipo, p_fechaPrestamo, p_fechaLimite, 'activo');
 end $$
 DELIMITER ;
 
