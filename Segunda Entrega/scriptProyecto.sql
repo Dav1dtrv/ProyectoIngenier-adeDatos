@@ -409,7 +409,7 @@ after insert
 on prestamo
 for each row
 begin
-	update equipo set estado = 'prestado'
+	update equipo set estado = 'no disponible'
 	where idEquipo = new.idEquipoFK;
 end $$ 
 DELIMITER ;
@@ -421,16 +421,10 @@ before insert
 on prestamo
 for each row
 begin
-    declare disp varchar(20);
-
-    select disponibilidad into disp
-    from equipo
-    where idEquipo = new.idEquipo;
-
-    if disp != 'disponible' then
-		signal sqlstate '45000'
-		set message_text = 'no se puede realizar el préstamo, el equipo no está disponible';
-	end if;
+    if (select estado from equipo where idEquipo = new.idEquipoFK) != 'disponible' then
+        signal sqlstate '45000'
+        set message_text = 'El equipo no está disponible para préstamo.';
+    end if;
 end $$
 DELIMITER ;
 
@@ -464,20 +458,14 @@ DELIMITER ;
 
 # RQF018 - Extensión devolución  
 update prestamo
-set fechaLimite = '2025-10-25'
+set fechaDevolucion = '2025-10-25'
 where idPrestamo = 3 and estadoPrestamo = 'activo';
 
 # RQF019 - Consultar préstamo por estado – Alto nivel
 select 
-    p.idPrestamo as 'ID Préstamo',
-    u.nombre as 'Nombre de Usuario',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    p.fechaPrestamo as 'Fecha Préstamo',
-    p.fechaLimite as 'Fecha Límite',
-    p.fechaDevolucion as 'Fecha Devolución',
-    p.estadoPrestamo as 'Estado Préstamo'
+    p.idPrestamo as 'ID Préstamo', u.nombre as 'Nombre de Usuario', e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca', e.modelo as 'Modelo', p.fechaPrestamo as 'Fecha Préstamo',
+    p.fechaLimite as 'Fecha Límite', p.fechaDevolucion as 'Fecha Devolución', p.estadoPrestamo as 'Estado Préstamo'
 from prestamo p
 inner join usuario u on p.idUsuarioFK = u.idUsuario
 inner join equipo e on p.idEquipoFK = e.idEquipo
@@ -533,16 +521,12 @@ where u.idUsuario = 4;
 
 # RQF023 - Equipo más prestado – Alto nivel
 select 
-    e.idEquipo as 'ID Equipo',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    count(p.idPrestamo) as 'Cantidad de Préstamos'
-from prestamo p
+    e.idEquipo as 'ID Equipo', e.tipoEquipo as 'Tipo de equipo', e.marca as 'Marca',
+    e.modelo as 'Modelo', count(p.idPrestamo) as 'Cantidad de Préstamos' from prestamo p
 inner join equipo e on p.idEquipoFK = e.idEquipo
-group by e.idEquipo, e.tipoEquipo, e.marca, e.modelo
-order by count(p.idPrestamo) desc
-limit 1; 
+group by e.idEquipo
+order by count(p.idPrestamo) desc limit 1;
+ 
 -- Encontramos que utilizar el limit 1 es más eficiente que realizar una subconsulta para buscar el más prestado
 
 # RQF024 - Consulta de préstamos activos con detalle del cliente
@@ -576,20 +560,12 @@ order by count(p.idPrestamo) desc;
 
 # RQF026 - Detección de préstamos vencidos – Alto nivel
 select 
-    p.idPrestamo as 'ID Préstamo',
-    u.nombre as 'Nombre del Cliente',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    p.fechaPrestamo as 'Fecha Préstamo',
-    p.fechaLimite as 'Fecha Límite',
-    p.fechaDevolucion as 'Fecha Devolución',
-    p.estadoPrestamo as 'Estado Préstamo'
-from prestamo p
+    p.idPrestamo as 'ID Préstamo', u.nombre as 'Nombre del Cliente', e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca', e.modelo as 'Modelo', p.fechaPrestamo as 'Fecha Préstamo', p.fechaLimite as 'Fecha Límite', 
+    p.fechaDevolucion as 'Fecha Devolución', p.estadoPrestamo as 'Estado Préstamo' from prestamo p
 inner join usuario u on p.idUsuarioFK = u.idUsuario
 inner join equipo e on p.idEquipoFK = e.idEquipo
-where p.estadoPrestamo = 'vencido'
-   or (p.estadoPrestamo = 'activo' and p.fechaLimite < curdate());
+where p.estadoPrestamo = 'vencido';
 
 # RQF027 - Equipos más prestados del mes  
 select 
@@ -602,7 +578,7 @@ from prestamo p
 inner join equipo e on p.idEquipoFK = e.idEquipo
 where month(p.fechaPrestamo) = month(curdate())
 and year(p.fechaPrestamo) = year(curdate())
-group by e.idEquipo, e.tipoEquipo, e.marca, e.modelo
+group by e.idEquipo
 order by count(p.idPrestamo) desc;
 
 # RQF028 - Consulta disponibilidad y préstamos  
@@ -616,7 +592,7 @@ select
 from equipo e
 left join prestamo p on e.idEquipo = p.idEquipoFK
 where e.estado = 'disponible'
-group by e.idEquipo, e.tipoEquipo, e.marca, e.modelo, e.estado
+group by e.idEquipo
 order by count(p.idPrestamo) desc;
 
 # RQF029 - Consulta préstamos por tipo de equipo  
@@ -636,7 +612,7 @@ select
 from usuario u
 inner join prestamo p on u.idUsuario = p.idUsuarioFK
 where p.estadoPrestamo = 'activo'
-group by u.idUsuario, u.nombre
+group by u.idUsuario
 order by count(p.idPrestamo) desc;
 
 # RQF031 - Procedimiento de registro de préstamo  
@@ -660,23 +636,10 @@ create procedure registrarDevolucion (
     in p_fechaDevolucion datetime
 )
 begin
-    declare v_idEquipo int;
-
-    # Obtener el id del equipo asociado al préstamo
-    select idEquipoFK into v_idEquipo
-    from prestamo
-    where idPrestamo = p_idPrestamo;
-
-    # Actualizar la fecha de devolución y el estado del préstamo
     update prestamo
     set fechaDevolucion = p_fechaDevolucion,
         estadoPrestamo = 'devuelto'
     where idPrestamo = p_idPrestamo;
-
-    # Cambiar el estado del equipo a 'disponible'
-    update equipo
-    set estado = 'disponible'
-    where idEquipo = v_idEquipo;
 end $$
 DELIMITER ;
 
@@ -684,7 +647,6 @@ DELIMITER ;
 DELIMITER $$
 create procedure actualizarPrestamosVencidos ()
 begin
-    # Actualiza todos los préstamos activos cuya fecha límite ya pasó
     update prestamo
     set estadoPrestamo = 'vencido'
     where estadoPrestamo = 'activo'
@@ -742,17 +704,17 @@ where p.estadoPrestamo = 'activo';
 # RQF037 - Vista de historial por cliente  
 create view vistaHistorialCliente as
 select 
-    u.idUsuario as idUsuario,
-    u.nombre as nombreUsuario,
-    p.idPrestamo as idPrestamo,
-    e.idEquipo as idEquipo,
-    e.tipoEquipo as tipoEquipo,
-    e.marca as marca,
-    e.modelo as modelo,
-    p.fechaPrestamo as fechaPrestamo,
-    p.fechaLimite as fechaLimite,
-    p.fechaDevolucion as fechaDevolucion,
-    p.estadoPrestamo as estadoPrestamo
+    u.idUsuario as 'ID Usuario',
+    u.nombre as 'Nombre de Usuario',
+    p.idPrestamo as 'ID Préstamo',
+    e.idEquipo as 'ID Equipo',
+    e.tipoEquipo as 'Tipo de Equipo',
+    e.marca as 'Marca',
+    e.modelo as 'Modelo',
+    p.fechaPrestamo as 'Fecha de préstamo',
+    p.fechaLimite as 'Fecha límite',
+    p.fechaDevolucion as 'Fecha devolución',
+    p.estadoPrestamo as 'Estado del préstamo'
 from prestamo p
 inner join usuario u on p.idUsuarioFK = u.idUsuario
 inner join equipo e on p.idEquipoFK = e.idEquipo
@@ -769,9 +731,7 @@ select
 from equipo e
 order by e.tipoEquipo, e.idEquipo;
 
-select * from vistaInventario;
-
-# RQF039 - Vista equipos más usados  
+# RQF039 - Vista equipos más usados del mes
 create view vistaEquiposMasUsados as
 select 
     e.idEquipo as 'ID Equipo',
@@ -783,7 +743,7 @@ from equipo e
 inner join prestamo p on e.idEquipo = p.idEquipoFK
 where month(p.fechaPrestamo) = month(curdate())
   and year(p.fechaPrestamo) = year(curdate())
-group by e.idEquipo, e.tipoEquipo, e.marca, e.modelo
+group by e.idEquipo
 order by count(p.idPrestamo) desc;
 
 # RQF040 - Restricción eliminación equipos  
@@ -792,12 +752,12 @@ create trigger beforeDeleteEquipo
 before delete
 on equipo
 for each row
-begin
+begin	
     declare prestamosActivos int;
 
     select count(*) into prestamosActivos
     from prestamo
-    where idEquipo = old.idEquipo and estado = 'activo';
+    where idEquipoFK = old.idEquipo and estado = 'activo';
 
     if prestamosActivos > 0 then
         signal sqlstate '45000'
@@ -805,4 +765,3 @@ begin
     end if;
 end $$ 
 DELIMITER ;
-
