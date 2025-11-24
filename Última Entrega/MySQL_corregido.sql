@@ -489,7 +489,7 @@ after insert
 on equiposPrestados
 for each row
 begin
-	update equipo set estado = 'no disponible'
+	update equipo set estado = 'prestado'
 	where idEquipo = new.idEquipoFK;
 end $$ 
 DELIMITER ;
