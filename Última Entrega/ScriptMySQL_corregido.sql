@@ -439,17 +439,21 @@ where idEquipo = 1;
 delete from equiposPrestados where idEquipoFK = 5;
 delete from equipo where idEquipo = 5;
 
-# RQF004 - Consultar lista de equipos
-select * from equipo;
+# RQF012 - Registrar préstamo – Alto nivel
+insert into prestamo (idUsuarioFK, fechaPrestamo, fechaLimite, estadoPrestamo)
+values (1, '2025-10-01', '2025-10-08', 'activo');
+SET @lastPrestamoId = LAST_INSERT_ID();
+insert into equiposPrestados (idPrestamoFK, idEquipoFK) values (@lastPrestamoId, 1);
 
-# RQF005 - Consultar lista de equipos disponibles
-select * from equipo
-where estado = 'disponible';
+# RQF013 - Modificar préstamo a devuelto – Alto nivel
+update prestamo
+set estadoPrestamo = 'devuelto'
+where idPrestamo = 5;
 
-# RQF006 - Consultar disponibilidad de equipo por nombre o código
-select idEquipo, tipoEquipo, marca, modelo, estado
-from equipo
-where idEquipo = 3 or tipoEquipo like '%portátil%';
+# RQF018 - Extender fecha de devolución  
+update prestamo
+set fechaDevolucion = '2025-10-25'
+where idPrestamo = 3 and estadoPrestamo = 'activo';
 
 # RQF007 - Registrar cliente nuevo
 insert into usuario (nombre, documento, email, telefono, tipoUsuario)
@@ -463,253 +467,6 @@ where idUsuario = 1;
 # RQF009 - Eliminar cliente
 delete from usuario
 where idUsuario = 4;
-
-# RQF010 - Consultar lista de clientes
-select * from usuario;
-
-# RQF011 - Consultar préstamos por idUsuario
-select * from prestamo
-where idUsuarioFK = 3;
-
-# RQF012 - Registrar préstamo – Alto nivel
-insert into prestamo (idUsuarioFK, fechaPrestamo, fechaLimite, estadoPrestamo)
-values (1, '2025-10-01', '2025-10-08', 'activo');
-SET @lastPrestamoId = LAST_INSERT_ID();
-insert into equiposPrestados (idPrestamoFK, idEquipoFK) values (@lastPrestamoId, 1);
-
-# RQF013 - Modificar préstamo a devuelto – Alto nivel
-update prestamo
-set estadoPrestamo = 'devuelto'
-where idPrestamo = 5;
-
-# RQF014 - Actualizar estado de equipo a prestado
-DELIMITER $$
-create trigger actualizarEquipoPrestado
-after insert 
-on equiposPrestados
-for each row
-begin
-	update equipo set estado = 'prestado'
-	where idEquipo = new.idEquipoFK;
-end $$ 
-DELIMITER ;
-
-# RQF015 - No permitir préstamo de equipos no disponibles
-DELIMITER $$
-create trigger verificarDisponibilidadEquipo
-before insert 
-on equiposPrestados
-for each row
-begin
-    if (select estado from equipo where idEquipo = new.idEquipoFK) != 'disponible' then
-        signal sqlstate '45000'
-        set message_text = 'El equipo no está disponible para préstamo.';
-    end if;
-end $$
-DELIMITER ;
-
-# RQF016 - Modificar el estado de un equipo cuando es devuelto
-DELIMITER $$
-create trigger actualizarEquipoDisponible
-after update 
-on prestamo
-for each row
-begin
-    if new.estadoPrestamo = 'devuelto' and old.estadoPrestamo != 'devuelto' then
-        update equipo e
-        join equiposPrestados ep on e.idEquipo = ep.idEquipoFK
-        set e.estado = 'disponible'
-        where ep.idPrestamoFK = new.idPrestamo;
-    end if;
-end $$
-DELIMITER ;
-
-# RQF017 - Registrar fecha de devolución  
-DELIMITER $$
-create trigger registrarFechaDevolucion
-before update 
-on prestamo
-for each row
-begin
-    if new.estadoPrestamo = 'devuelto' and old.estadoPrestamo != 'devuelto' then
-        set new.fechaDevolucion = now();
-    end if;
-end $$
-DELIMITER ;
-
-# RQF018 - Extender fecha de devolución  
-update prestamo
-set fechaDevolucion = '2025-10-25'
-where idPrestamo = 3 and estadoPrestamo = 'activo';
-
-# RQF019 - Consultar préstamo por estado – Alto nivel
-select 
-    p.idPrestamo as 'ID Préstamo',
-    u.nombre as 'Nombre de Usuario',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    p.fechaPrestamo as 'Fecha Préstamo',
-    p.fechaLimite as 'Fecha Límite',
-    p.fechaDevolucion as 'Fecha Devolución',
-    p.estadoPrestamo as 'Estado Préstamo'
-from prestamo p
-inner join usuario u on p.idUsuarioFK = u.idUsuario
-inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
-inner join equipo e on ep.idEquipoFK = e.idEquipo
-where p.estadoPrestamo = 'activo';
-
-# RQF020 - Consultar lista de préstamos
-select 
-    p.idPrestamo as 'ID Préstamo',
-    u.nombre as 'Nombre de Usuario',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    p.fechaPrestamo as 'Fecha Préstamo',
-    p.fechaLimite as 'Fecha Límite',
-    p.fechaDevolucion as 'Fecha Devolución',
-    p.estadoPrestamo as 'Estado Préstamo'
-from prestamo p
-inner join usuario u on p.idUsuarioFK = u.idUsuario
-inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
-inner join equipo e on ep.idEquipoFK = e.idEquipo
-order by p.estadoPrestamo, p.fechaPrestamo desc;
-
-# RQF021 - Consultar préstamo por equipo
-select 
-    p.idPrestamo as 'ID Préstamo',
-    e.idEquipo as 'ID Equipo',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    u.nombre as 'Nombre de Usuario',
-    p.fechaPrestamo as 'Fecha Préstamo',
-    p.fechaDevolucion as 'Fecha Devolución',
-    p.estadoPrestamo as 'Estado Préstamo'
-from prestamo p
-inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
-inner join equipo e on ep.idEquipoFK = e.idEquipo
-inner join usuario u on p.idUsuarioFK = u.idUsuario
-where e.idEquipo = 2;
-
-# RQF022 - Consultar detalladamente los préstamos de un usuario
-select 
-    p.idPrestamo as 'ID Préstamo',
-    u.idUsuario as 'ID Usuario',
-    u.nombre as 'Nombre de Usuario',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    p.fechaPrestamo as 'Fecha Préstamo',
-    p.fechaDevolucion as 'Fecha Devolución',
-    p.estadoPrestamo as 'Estado Préstamo'
-from prestamo p
-inner join usuario u on p.idUsuarioFK = u.idUsuario
-inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
-inner join equipo e on ep.idEquipoFK = e.idEquipo
-where u.idUsuario = 4;
-
-# RQF023 - Consultar equipo más prestado – Alto nivel
-select 
-    e.idEquipo as 'ID Equipo', e.tipoEquipo as 'Tipo de equipo', e.marca as 'Marca',
-    e.modelo as 'Modelo', count(ep.idPrestamoFK) as 'Cantidad de Préstamos'
-from equipo e
-inner join equiposPrestados ep on e.idEquipo = ep.idEquipoFK
-group by e.idEquipo
-order by count(ep.idPrestamoFK) desc limit 1;
- 
--- Encontramos que utilizar el limit 1 es más eficiente que realizar una subconsulta para buscar el más prestado
-
-# RQF024 - Consulta de préstamos activos con detalle del cliente
-select 
-    p.idPrestamo as 'ID Préstamo',
-    u.idUsuario as 'ID Usuario',
-    u.nombre as 'Nombre del Cliente',
-    e.idEquipo as 'ID Equipo',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    p.fechaPrestamo as 'Fecha Préstamo',
-    p.fechaDevolucion as 'Fecha Devolución',
-    p.estadoPrestamo as 'Estado Préstamo'
-from prestamo p
-inner join usuario u on p.idUsuarioFK = u.idUsuario
-inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
-inner join equipo e on ep.idEquipoFK = e.idEquipo
-where p.estadoPrestamo = 'activo';
-
-# RQF025 - Consulta equipos por orden de solicitud
-select 
-    e.idEquipo as 'ID Equipo',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    count(ep.idPrestamoFK) as 'Cantidad de Préstamos'
-from equipo e
-left join equiposPrestados ep on e.idEquipo = ep.idEquipoFK
-group by e.idEquipo, e.tipoEquipo, e.marca, e.modelo
-order by count(ep.idPrestamoFK) desc;
-
-# RQF026 - Detección de préstamos vencidos – Alto nivel
-select 
-    p.idPrestamo as 'ID Préstamo', u.nombre as 'Nombre del Cliente', e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca', e.modelo as 'Modelo', p.fechaPrestamo as 'Fecha Préstamo', p.fechaLimite as 'Fecha Límite', 
-    p.fechaDevolucion as 'Fecha Devolución', p.estadoPrestamo as 'Estado Préstamo'
-from prestamo p
-inner join usuario u on p.idUsuarioFK = u.idUsuario
-inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
-inner join equipo e on ep.idEquipoFK = e.idEquipo
-where p.estadoPrestamo = 'vencido';
-
-# RQF027 - Consultar equipos más prestados del mes  
-select 
-    e.idEquipo as 'ID Equipo',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    count(ep.idPrestamoFK) as 'Cantidad de préstamos'
-from equiposPrestados ep
-inner join equipo e on ep.idEquipoFK = e.idEquipo
-inner join prestamo p on ep.idPrestamoFK = p.idPrestamo
-where month(p.fechaPrestamo) = month(curdate())
-and year(p.fechaPrestamo) = year(curdate())
-group by e.idEquipo
-order by count(ep.idPrestamoFK) desc;
-
-# RQF028 - Consulta disponibilidad y préstamos de los equipos
-select 
-    e.idEquipo as 'ID Equipo',
-    e.tipoEquipo as 'Tipo de equipo',
-    e.marca as 'Marca',
-    e.modelo as 'Modelo',
-    e.estado as 'Estado actual',
-    count(ep.idPrestamoFK) as 'Total de préstamos realizados'
-from equipo e
-left join equiposPrestados ep on e.idEquipo = ep.idEquipoFK
-where e.estado = 'disponible'
-group by e.idEquipo
-order by count(ep.idPrestamoFK) desc;
-
-# RQF029 - Consulta préstamos por tipo de equipo  
-select 
-    e.tipoEquipo as 'Tipo de equipo',
-    count(ep.idPrestamoFK) as 'Cantidad de préstamos realizados'
-from equiposPrestados ep
-inner join equipo e on ep.idEquipoFK = e.idEquipo
-group by e.tipoEquipo
-order by count(ep.idPrestamoFK) desc;
-
-# RQF030 - Consultar clientes con préstamos activos  
-select 
-    u.idUsuario as 'ID Usuario',
-    u.nombre as 'Nombre de Usuario',
-    count(p.idPrestamo) as 'Cantidad de préstamos activos'
-from usuario u
-inner join prestamo p on u.idUsuario = p.idUsuarioFK
-where p.estadoPrestamo = 'activo'
-group by u.idUsuario
-order by count(p.idPrestamo) desc;
 
 # RQF031 - Procedimiento de registro de préstamo  
 DELIMITER $$
@@ -793,8 +550,8 @@ begin
 end $$
 DELIMITER ;
 
-# RQF036 - Vista préstamos activos  
-create view vistaPrestamosActivos as
+# RQF036 - Vista préstamos develtos
+create view Vista_Préstamos_Devueltos as
 select 
     p.idPrestamo as 'ID Préstamo',
     u.nombre as 'Nombre de Usuario',
@@ -808,10 +565,10 @@ from prestamo p
 inner join usuario u on p.idUsuarioFK = u.idUsuario
 inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
 inner join equipo e on ep.idEquipoFK = e.idEquipo
-where p.estadoPrestamo = 'activo';
+where p.estadoPrestamo = 'devuelto';
 
 # RQF037 - Vista de historial por cliente  
-create view vistaHistorialCliente as
+create view Vista_Historial_Cliente as
 select 
     u.idUsuario as 'ID Usuario',
     u.nombre as 'Nombre de Usuario',
@@ -831,7 +588,7 @@ inner join equipo e on ep.idEquipoFK = e.idEquipo
 order by u.idUsuario, p.fechaPrestamo desc;
 
 # RQF038 - Vista inventario  
-create view vistaInventario as
+create view Vista_Inventario as
 select 
     e.idEquipo as 'ID Equipo',
     e.tipoEquipo as 'Tipo de equipo',
@@ -842,7 +599,7 @@ from equipo e
 order by e.tipoEquipo, e.idEquipo;
 
 # RQF039 - Vista equipos más usados del mes
-create view vistaEquiposMasUsados as
+create view Vista_Equipos_más_Usados as
 select 
     e.idEquipo as 'ID Equipo',
     e.tipoEquipo as 'Tipo de equipo',
@@ -856,6 +613,61 @@ where month(p.fechaPrestamo) = 10
   and year(p.fechaPrestamo) = 2024
 group by e.idEquipo
 order by count(ep.idPrestamoFK) desc;
+
+# RQF014 - Actualizar estado de equipo a prestado
+DELIMITER $$
+create trigger actualizarEquipoPrestado
+after insert 
+on equiposPrestados
+for each row
+begin
+	update equipo set estado = 'prestado'
+	where idEquipo = new.idEquipoFK;
+end $$ 
+DELIMITER ;
+
+# RQF015 - No permitir préstamo de equipos no disponibles
+DELIMITER $$
+create trigger verificarDisponibilidadEquipo
+before insert 
+on equiposPrestados
+for each row
+begin
+    if (select estado from equipo where idEquipo = new.idEquipoFK) != 'disponible' then
+        signal sqlstate '45000'
+        set message_text = 'El equipo no está disponible para préstamo.';
+    end if;
+end $$
+DELIMITER ;
+
+# RQF016 - Modificar el estado de un equipo cuando es devuelto
+DELIMITER $$
+create trigger actualizarEquipoDisponible
+after update 
+on prestamo
+for each row
+begin
+    if new.estadoPrestamo = 'devuelto' and old.estadoPrestamo != 'devuelto' then
+        update equipo e
+        join equiposPrestados ep on e.idEquipo = ep.idEquipoFK
+        set e.estado = 'disponible'
+        where ep.idPrestamoFK = new.idPrestamo;
+    end if;
+end $$
+DELIMITER ;
+
+# RQF017 - Registrar fecha de devolución  
+DELIMITER $$
+create trigger registrarFechaDevolucion
+before update 
+on prestamo
+for each row
+begin
+    if new.estadoPrestamo = 'devuelto' and old.estadoPrestamo != 'devuelto' then
+        set new.fechaDevolucion = now();
+    end if;
+end $$
+DELIMITER ;
 
 # RQF040 - Restricción para la eliminación de equipos  
 DELIMITER $$
@@ -879,3 +691,184 @@ begin
     end if;
 end $$ 
 DELIMITER ;
+
+/* ---------- VER EN METABASE ---------- */
+# RQF004 - Consultar lista de equipos
+select * from equipo;
+
+# RQF010 - Consultar lista de clientes
+select * from usuario;
+
+# RQF005 - Consultar lista de equipos disponibles
+create view Vista_Equipos_Disponibles as
+select * from equipo
+where estado = 'disponible';
+
+# RQF006 - Consultar disponibilidad de equipo por tipo de equipo - Metabase
+select idEquipo, tipoEquipo, marca, modelo, estado
+from equipo
+where tipoEquipo like '%portátil%';
+
+# RQF011 - Consultar préstamos por idUsuario - Metabase
+select * from prestamo
+where idUsuarioFK = 3;
+
+# RQF019 - Consultar préstamo por estado – Alto nivel - Metabase
+select 
+    p.idPrestamo as 'ID Préstamo',
+    u.nombre as 'Nombre de Usuario',
+    e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca',
+    e.modelo as 'Modelo',
+    p.fechaPrestamo as 'Fecha Préstamo',
+    p.fechaLimite as 'Fecha Límite',
+    p.fechaDevolucion as 'Fecha Devolución',
+    p.estadoPrestamo as 'Estado Préstamo'
+from prestamo p
+inner join usuario u on p.idUsuarioFK = u.idUsuario
+inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
+inner join equipo e on ep.idEquipoFK = e.idEquipo
+where p.estadoPrestamo = 'activo';
+
+# RQF020 - Consultar lista de préstamos
+create view Vista_Prestamos_Detallados as select 
+    p.idPrestamo as 'ID Préstamo',
+    u.nombre as 'Nombre de Usuario',
+    e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca',
+    e.modelo as 'Modelo',
+    p.fechaPrestamo as 'Fecha Préstamo',
+    p.fechaLimite as 'Fecha Límite',
+    p.fechaDevolucion as 'Fecha Devolución',
+    p.estadoPrestamo as 'Estado Préstamo'
+from prestamo p
+inner join usuario u on p.idUsuarioFK = u.idUsuario
+inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
+inner join equipo e on ep.idEquipoFK = e.idEquipo
+order by p.estadoPrestamo, p.fechaPrestamo desc;
+
+# RQF021 - Consultar préstamo por equipo - Metabase
+select 
+    p.idPrestamo as 'ID Préstamo',
+    e.idEquipo as 'ID Equipo',
+    e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca',
+    e.modelo as 'Modelo',
+    u.nombre as 'Nombre de Usuario',
+    p.fechaPrestamo as 'Fecha Préstamo',
+    p.fechaDevolucion as 'Fecha Devolución',
+    p.estadoPrestamo as 'Estado Préstamo'
+from prestamo p
+inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
+inner join equipo e on ep.idEquipoFK = e.idEquipo
+inner join usuario u on p.idUsuarioFK = u.idUsuario
+where e.idEquipo = 2;
+
+# RQF022 - Consultar detalladamente los préstamos de un usuario - Metabase
+select 
+    p.idPrestamo as 'ID Préstamo',
+    u.idUsuario as 'ID Usuario',
+    u.nombre as 'Nombre de Usuario',
+    e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca',
+    e.modelo as 'Modelo',
+    p.fechaPrestamo as 'Fecha Préstamo',
+    p.fechaDevolucion as 'Fecha Devolución',
+    p.estadoPrestamo as 'Estado Préstamo'
+from prestamo p
+inner join usuario u on p.idUsuarioFK = u.idUsuario
+inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
+inner join equipo e on ep.idEquipoFK = e.idEquipo
+where u.idUsuario = 4;
+
+# RQF023 - Consultar equipo más prestado – Alto nivel
+create view Vista_Equipo_Más_Prestado as
+select 
+    e.idEquipo as 'ID Equipo', e.tipoEquipo as 'Tipo de equipo', e.marca as 'Marca',
+    e.modelo as 'Modelo', count(ep.idPrestamoFK) as 'Cantidad de Préstamos'
+from equipo e
+inner join equiposPrestados ep on e.idEquipo = ep.idEquipoFK
+group by e.idEquipo
+order by count(ep.idPrestamoFK) desc limit 1;
+ 
+-- Encontramos que utilizar el limit 1 es más eficiente que realizar una subconsulta para buscar el más prestado
+
+# RQF024 - Consultar lista de préstamos
+select * from prestamo;
+
+# RQF025 - Consulta equipos por orden de solicitud
+create view Vista_Equipos_por_Orden_de_Solicitud as
+select 
+    e.idEquipo as 'ID Equipo',
+    e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca',
+    e.modelo as 'Modelo',
+    count(ep.idPrestamoFK) as 'Cantidad de Préstamos'
+from equipo e
+left join equiposPrestados ep on e.idEquipo = ep.idEquipoFK
+group by e.idEquipo, e.tipoEquipo, e.marca, e.modelo
+order by count(ep.idPrestamoFK) desc;
+
+# RQF026 - Detección de préstamos vencidos – Alto nivel
+create view Vista_Préstamos_Vencidos as
+select 
+    p.idPrestamo as 'ID Préstamo', u.nombre as 'Nombre del Cliente', e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca', e.modelo as 'Modelo', p.fechaPrestamo as 'Fecha Préstamo', p.fechaLimite as 'Fecha Límite', 
+    p.fechaDevolucion as 'Fecha Devolución', p.estadoPrestamo as 'Estado Préstamo'
+from prestamo p
+inner join usuario u on p.idUsuarioFK = u.idUsuario
+inner join equiposPrestados ep on p.idPrestamo = ep.idPrestamoFK
+inner join equipo e on ep.idEquipoFK = e.idEquipo
+where p.estadoPrestamo = 'vencido';
+
+# RQF027 - Consultar equipos más prestados del mes  
+create view Vista_Equipos_más_Prestados_del_Mes as
+select 
+    e.idEquipo as 'ID Equipo',
+    e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca',
+    e.modelo as 'Modelo',
+    count(ep.idPrestamoFK) as 'Cantidad de préstamos'
+from equiposPrestados ep
+inner join equipo e on ep.idEquipoFK = e.idEquipo
+inner join prestamo p on ep.idPrestamoFK = p.idPrestamo
+where month(p.fechaPrestamo) = month(curdate())
+and year(p.fechaPrestamo) = year(curdate())
+group by e.idEquipo
+order by count(ep.idPrestamoFK) desc;
+
+# RQF028 - Consulta disponibilidad y préstamos de los equipos
+create view Vista_Disponibilidad_y_Préstamos_de_Equipos as
+select 
+    e.idEquipo as 'ID Equipo',
+    e.tipoEquipo as 'Tipo de equipo',
+    e.marca as 'Marca',
+    e.modelo as 'Modelo',
+    e.estado as 'Estado actual',
+    count(ep.idPrestamoFK) as 'Total de préstamos realizados'
+from equipo e
+left join equiposPrestados ep on e.idEquipo = ep.idEquipoFK
+where e.estado = 'disponible'
+group by e.idEquipo
+order by count(ep.idPrestamoFK) desc;
+
+# RQF029 - Consulta préstamos por tipo de equipo - Metabase
+select 
+    e.tipoEquipo as 'Tipo de equipo',
+    count(ep.idPrestamoFK) as 'Cantidad de préstamos realizados'
+from equiposPrestados ep
+inner join equipo e on ep.idEquipoFK = e.idEquipo
+group by e.tipoEquipo
+order by count(ep.idPrestamoFK) desc;
+
+# RQF030 - Consultar clientes con préstamos activos  
+create view Vista_Clientes_con_Préstamos_Activos as
+select 
+    u.idUsuario as 'ID Usuario',
+    u.nombre as 'Nombre de Usuario',
+    count(p.idPrestamo) as 'Cantidad de préstamos activos'
+from usuario u
+inner join prestamo p on u.idUsuario = p.idUsuarioFK
+where p.estadoPrestamo = 'activo'
+group by u.idUsuario
+order by count(p.idPrestamo) desc;
